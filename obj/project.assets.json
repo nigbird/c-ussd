@@ -8,24 +8,32 @@
     "net9.0": []
   },
   "packageFolders": {
-    "C:\\Users\\Tadele.Mesfin\\.nuget\\packages\\": {}
+    "C:\\Users\\nuhamin.miheretu\\.nuget\\packages\\": {},
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\Tadele.Mesfin\\ussd\\ussd.csproj",
+      "projectUniqueName": "C:\\Users\\nuhamin.miheretu\\ussd\\ussd.csproj",
       "projectName": "ussd",
-      "projectPath": "C:\\Users\\Tadele.Mesfin\\ussd\\ussd.csproj",
-      "packagesPath": "C:\\Users\\Tadele.Mesfin\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\Tadele.Mesfin\\ussd\\obj\\",
+      "projectPath": "C:\\Users\\nuhamin.miheretu\\ussd\\ussd.csproj",
+      "packagesPath": "C:\\Users\\nuhamin.miheretu\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\nuhamin.miheretu\\ussd\\obj\\",
       "projectStyle": "PackageReference",
+      "fallbackFolders": [
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+      ],
       "configFilePaths": [
-        "C:\\Users\\Tadele.Mesfin\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "C:\\Users\\nuhamin.miheretu\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
       "originalTargetFrameworks": [
         "net9.0"
       ],
       "sources": {
+        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+        "C:\\Program Files\\dotnet\\library-packs": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {

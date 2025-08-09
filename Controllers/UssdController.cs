@@ -14,11 +14,17 @@ namespace ussd.Controllers
         // Simple in-memory session store for demo
         private static Dictionary<string, Dictionary<string, object>> Sessions = new();
 
-        // Example: per-user PINs and transaction history
+        // Example: per-user PINs, balances, and transaction history
         private static Dictionary<string, string> UserPins = new() {
             {"+251900000001", "1234"},
             {"+251900000002", "5678"},
-            {"+251900000003", "4321"}
+            {"+251900000003", "4321"},
+            {"+251949602907", "1235"}
+        };
+        private static Dictionary<string, decimal> UserBalances = new() {
+            {"+251900000001", 5000m},
+            {"+251900000002", 12000m},
+            {"+251900000003", 300m}
         };
         private static Dictionary<string, List<string>> UserTransactions = new();
         private static int MaxPinAttempts = 3;
@@ -47,7 +53,7 @@ namespace ussd.Controllers
                 session["lastActivity"] = DateTime.UtcNow;
 
                 string response = "";
-                var homeMenu = "CON Welcome to Microloan USSD.\n1. Apply for Loan\n2. Check Loan Status\n3. Repay Loan\n4. Check Balance\n5. Transaction History\n6. Change PIN\n0. Exit";
+                var homeMenu = "CON Welcome to Mobile Banking USSD.\n1. Check Balance\n2. Mini Statement\n3. Money Transfer\n4. Airtime Top-up\n5. Change PIN\n6. Loan Services\n0. Exit";
                 var correctPin = UserPins.ContainsKey(phoneNumber) ? UserPins[phoneNumber] : "1234";
                 switch (session["screen"])
                 {
@@ -84,277 +90,113 @@ namespace ussd.Controllers
                         response = homeMenu;
                     else if (userInput == "1")
                     {
-                        session["screen"] = "CHOOSE_BANK";
-                        response = "CON Select Bank:\n" + string.Join("\n", MockDatabase.Banks.Select((b, i) => $"{i + 1}. {b.Name}"));
-                        response += "\n0. Home\n99. Back";
+                        // Check Balance
+                        var balance = UserBalances.ContainsKey(phoneNumber) ? UserBalances[phoneNumber] : 0m;
+                        response = $"END Your account balance is: {balance:C}";
+                        Sessions.Remove(sessionId);
                     }
-                    else if (userInput == "2" || (session.ContainsKey("screen") && session["screen"].ToString() == "LOAN_STATUS_PAGING"))
+                    else if (userInput == "2")
                     {
-                        // Loan status: show paginated loans for this user
-                        var userLoans = MockLoanDB.GetLoans(phoneNumber);
-                        int page = session.ContainsKey("loanStatusPage") ? (int)session["loanStatusPage"] : 0;
-                        int pageSize = 2;
-                        if (userInput == "9") page++;
-                        if (userInput == "99" || userInput == "0") {
-                            session["screen"] = "HOME";
-                            session.Remove("loanStatusPage");
-                            response = homeMenu;
-                            break;
+                        // Mini Statement
+                        if (!UserTransactions.ContainsKey(phoneNumber) || UserTransactions[phoneNumber].Count == 0) {
+                            response = "END No transactions found.";
+                        } else {
+                            response = "END Mini Statement:\n" + string.Join("\n", UserTransactions[phoneNumber].TakeLast(5));
                         }
-                        if (userLoans.Count == 0)
-                        {
-                            response = "END You have no loans with NIB, Dashen, CBE, or Awash.";
-                            Sessions.Remove(sessionId);
-                        }
-                        else
-                        {
-                            session["screen"] = "LOAN_STATUS_PAGING";
-                            session["loanStatusPage"] = page;
-                            var loansToShow = userLoans.Skip(page * pageSize).Take(pageSize).ToList();
-                            response = "CON Your Loan Status:";
-                            for (int i = 0; i < loansToShow.Count; i++)
-                            {
-                                var loan = loansToShow[i];
-                                var outstanding = loan.Amount + loan.Interest - loan.Repaid;
-                                response += $"\n{(page * pageSize) + i + 1}. {loan.BankName}, {loan.ProductName}, Outstanding: {outstanding}";
-                            }
-                            if ((page + 1) * pageSize < userLoans.Count)
-                            {
-                                response += "\n9. More";
-                            }
-                            response += "\n0. Home\n99. Back";
-                        }
+                        Sessions.Remove(sessionId);
                     }
                     else if (userInput == "3")
                     {
-                        // Repay Loan: show all active loans for this user and prompt for selection
-                        var userLoans = MockLoanDB.GetLoans(phoneNumber).Where(l => l.Status == "Active" && (l.Amount + l.Interest - l.Repaid) > 0).ToList();
-                        if (userLoans.Count == 0)
-                        {
-                            response = "END No active loans to repay.";
-                            Sessions.Remove(sessionId);
-                        }
-                        else
-                        {
-                            session["screen"] = "REPAY_SELECT_LOAN";
-                            session["repayLoans"] = userLoans;
-                            response = "CON Select loan to repay:";
-                            for (int i = 0; i < userLoans.Count; i++)
-                            {
-                                var loan = userLoans[i];
-                                var outstanding = loan.Amount + loan.Interest - loan.Repaid;
-                                response += $"\n{i + 1}. {loan.BankName} - {loan.ProductName} (Outstanding: {outstanding})";
-                            }
-                            response += "\n0. Home\n99. Back";
-                        }
+                        // Money Transfer
+                        session["screen"] = "TRANSFER_ENTER_NUMBER";
+                        response = "CON Enter recipient phone number:";
                     }
                     else if (userInput == "4")
                     {
-                        var balance = MockBalanceDB.GetBalance(phoneNumber);
-                        response = $"END Your account balance is: {balance}";
-                        Sessions.Remove(sessionId);
+                        // Airtime Top-up
+                        session["screen"] = "AIRTIME_ENTER_AMOUNT";
+                        response = "CON Enter amount to top-up:";
                     }
                     else if (userInput == "5")
-                    {
-                        // Transaction history
-                        if (!UserTransactions.ContainsKey(phoneNumber) || UserTransactions[phoneNumber].Count == 0) {
-                            response = "END No transactions found.";
-                            Sessions.Remove(sessionId);
-                        } else {
-                            response = "END Transaction History:\n" + string.Join("\n", UserTransactions[phoneNumber].TakeLast(5));
-                            Sessions.Remove(sessionId);
-                        }
-                    }
-                    else if (userInput == "6")
                     {
                         session["screen"] = "CHANGE_PIN";
                         response = "CON Enter new 4-digit PIN:";
                     }
+                    else if (userInput == "6")
+                    {
+                        // Placeholder for future loan integration
+                        response = "END Loan services coming soon.";
+                        Sessions.Remove(sessionId);
+                    }
                     else if (userInput == "0")
                     {
-                        response = "END Thank you for using Microloan USSD.";
+                        response = "END Thank you for using Mobile Banking USSD.";
                         Sessions.Remove(sessionId);
                     }
                     else
                         response = $"CON Invalid choice.\n{homeMenu.Substring(4)}";
+                    break;
+                case "TRANSFER_ENTER_NUMBER":
+                    if (string.IsNullOrEmpty(userInput)) {
+                        response = "CON Enter recipient phone number:";
+                    } else {
+                        session["recipientNumber"] = userInput;
+                        session["screen"] = "TRANSFER_ENTER_AMOUNT";
+                        response = "CON Enter amount to transfer:";
+                    }
+                    break;
+                case "TRANSFER_ENTER_AMOUNT":
+                    if (decimal.TryParse(userInput, out decimal transferAmount) && transferAmount > 0) {
+                        var balance = UserBalances.ContainsKey(phoneNumber) ? UserBalances[phoneNumber] : 0m;
+                        if (transferAmount > balance) {
+                            response = "END Insufficient funds.";
+                            Sessions.Remove(sessionId);
+                        } else {
+                            UserBalances[phoneNumber] = balance - transferAmount;
+                            var recipient = session["recipientNumber"].ToString();
+                            if (UserBalances.ContainsKey(recipient))
+                                UserBalances[recipient] += transferAmount;
+                            else
+                                UserBalances[recipient] = transferAmount;
+                            if (!UserTransactions.ContainsKey(phoneNumber)) UserTransactions[phoneNumber] = new List<string>();
+                            UserTransactions[phoneNumber].Add($"Sent {transferAmount:C} to {recipient} on {DateTime.Now:yyyy-MM-dd HH:mm}");
+                            if (!UserTransactions.ContainsKey(recipient)) UserTransactions[recipient] = new List<string>();
+                            UserTransactions[recipient].Add($"Received {transferAmount:C} from {phoneNumber} on {DateTime.Now:yyyy-MM-dd HH:mm}");
+                            response = $"END Transfer of {transferAmount:C} to {recipient} successful.";
+                            Sessions.Remove(sessionId);
+                        }
+                    } else {
+                        response = "CON Invalid amount. Enter amount to transfer:";
+                    }
+                    break;
+                case "AIRTIME_ENTER_AMOUNT":
+                    if (decimal.TryParse(userInput, out decimal airtimeAmount) && airtimeAmount > 0) {
+                        var balance = UserBalances.ContainsKey(phoneNumber) ? UserBalances[phoneNumber] : 0m;
+                        if (airtimeAmount > balance) {
+                            response = "END Insufficient funds for airtime top-up.";
+                            Sessions.Remove(sessionId);
+                        } else {
+                            UserBalances[phoneNumber] = balance - airtimeAmount;
+                            if (!UserTransactions.ContainsKey(phoneNumber)) UserTransactions[phoneNumber] = new List<string>();
+                            UserTransactions[phoneNumber].Add($"Airtime top-up of {airtimeAmount:C} on {DateTime.Now:yyyy-MM-dd HH:mm}");
+                            response = $"END Airtime top-up of {airtimeAmount:C} successful.";
+                            Sessions.Remove(sessionId);
+                        }
+                    } else {
+                        response = "CON Invalid amount. Enter amount to top-up:";
+                    }
                     break;
                 case "CHANGE_PIN":
                     if (string.IsNullOrEmpty(userInput)) {
                         response = "CON Enter new 4-digit PIN:";
                     } else if (userInput.Length == 4 && userInput.All(char.IsDigit)) {
                         UserPins[phoneNumber] = userInput;
+                        if (!UserTransactions.ContainsKey(phoneNumber)) UserTransactions[phoneNumber] = new List<string>();
+                        UserTransactions[phoneNumber].Add($"PIN changed on {DateTime.Now:yyyy-MM-dd HH:mm}");
                         response = "END PIN changed successfully.";
                         Sessions.Remove(sessionId);
                     } else {
                         response = "CON Invalid PIN format. Enter new 4-digit PIN:";
-                    }
-                    break;
-                case "REPAY_SELECT_LOAN":
-                    var repayLoans = (List<MockLoan>)session["repayLoans"];
-                    int repayPage = session.ContainsKey("repayPage") ? (int)session["repayPage"] : 0;
-                    int repayPageSize = 2;
-                    if (userInput == "9") repayPage++;
-                    if (userInput == "99" || userInput == "0") {
-                        session["screen"] = "HOME";
-                        session.Remove("repayPage");
-                        response = homeMenu;
-                        break;
-                    }
-                    var loansToShowRepay = repayLoans.Skip(repayPage * repayPageSize).Take(repayPageSize).ToList();
-                    if (int.TryParse(userInput, out int repayChoice) && repayChoice >= 1 && repayChoice <= loansToShowRepay.Count)
-                    {
-                        session["selectedRepayLoan"] = loansToShowRepay[repayChoice - 1];
-                        session["screen"] = "REPAY_ENTER_AMOUNT";
-                        var loan = (MockLoan)session["selectedRepayLoan"];
-                        var outstanding = loan.Amount + loan.Interest - loan.Repaid;
-                        response = $"CON Enter amount to repay (Outstanding: {outstanding}):";
-                    }
-                    else
-                    {
-                        response = "CON Select loan to repay:";
-                        for (int i = 0; i < loansToShowRepay.Count; i++)
-                        {
-                            var loan = loansToShowRepay[i];
-                            var outstanding = loan.Amount + loan.Interest - loan.Repaid;
-                            response += $"\n{(repayPage * repayPageSize) + i + 1}. {loan.BankName} - {loan.ProductName} (Outstanding: {outstanding})";
-                        }
-                        if ((repayPage + 1) * repayPageSize < repayLoans.Count)
-                        {
-                            response += "\n9. More";
-                        }
-                        response += "\n0. Home\n99. Back";
-                    }
-                    response += "\n0. Home\n99. Back";
-                    session["repayPage"] = repayPage;
-                    break;
-                case "REPAY_ENTER_AMOUNT":
-                    var repayLoan = (MockLoan)session["selectedRepayLoan"];
-                    var repayOutstanding = repayLoan.Amount + repayLoan.Interest - repayLoan.Repaid;
-                    if (decimal.TryParse(userInput, out decimal repayAmount) && repayAmount > 0 && repayAmount <= repayOutstanding)
-                    {
-                        // Update the mock DB
-                        MockLoanDB.RepayLoan(phoneNumber, repayLoan, repayAmount);
-                        response = $"END Repayment of {repayAmount} for loan {repayLoan.ProductName} at {repayLoan.BankName} successful. Outstanding: {repayOutstanding - repayAmount}";
-                        Sessions.Remove(sessionId);
-                    }
-                    else
-                    {
-                        response = $"CON Invalid amount. Enter a number between 1 and {repayOutstanding}:";
-                        response += "\n0. Home\n99. Back";
-                    }
-                    break;
-                case "CHOOSE_BANK":
-                    if (userInput == "0") {
-                        session["screen"] = "HOME";
-                        response = homeMenu;
-                        Sessions.Remove(sessionId);
-                        break;
-                    }
-                    if (userInput == "99") {
-                        session["screen"] = "HOME";
-                        response = homeMenu;
-                        Sessions.Remove(sessionId);
-                        break;
-                    }
-                    if (int.TryParse(userInput, out int bankChoice) && bankChoice >= 1 && bankChoice <= MockDatabase.Banks.Count)
-                    {
-                        session["selectedBank"] = MockDatabase.Banks[bankChoice - 1];
-                        session["screen"] = "CHOOSE_PRODUCT";
-                        var bank = (Bank)session["selectedBank"];
-                        var products = bank.LoanProducts;
-                        session["eligibleOffers"] = products;
-                        response = "CON Choose a loan product:\n" + string.Join("\n", products.Select((p, i) => $"{i + 1}. {p.Name} (Amount: {p.MinAmount}-{p.MaxAmount})"));
-                        response += "\n0. Home\n99. Back";
-                    }
-                    else
-                    {
-                        response = "CON Invalid bank choice.\n" + string.Join("\n", MockDatabase.Banks.Select((b, i) => $"{i + 1}. {b.Name}"));
-                        response += "\n0. Home\n99. Back";
-                    }
-                    break;
-                case "CHOOSE_PRODUCT":
-                    var offers = (List<LoanProduct>)session["eligibleOffers"];
-                    if (userInput == "0") {
-                        session["screen"] = "HOME";
-                        response = homeMenu;
-                        Sessions.Remove(sessionId);
-                        break;
-                    }
-                    if (userInput == "99") {
-                        session["screen"] = "CHOOSE_BANK";
-                        response = "CON Select Bank:\n" + string.Join("\n", MockDatabase.Banks.Select((b, i) => $"{i + 1}. {b.Name}"));
-                        response += "\n0. Home\n99. Back";
-                        break;
-                    }
-                    if (int.TryParse(userInput, out int prodChoice) && prodChoice >= 1 && prodChoice <= offers.Count)
-                    {
-                        session["selectedProduct"] = offers[prodChoice - 1];
-                        session["screen"] = "APPLY_LOAN_AMOUNT";
-                        var prod = (LoanProduct)session["selectedProduct"];
-                        response = $"CON Enter amount (range: {prod.MinAmount}-{prod.MaxAmount})";
-                        response += "\n0. Home\n99. Back";
-                    }
-                    else
-                    {
-                        response = "CON Invalid choice.\n" + string.Join("\n", offers.Select((p, i) => $"{i + 1}. {p.Name} (Amount: {p.MinAmount}-{p.MaxAmount})"));
-                        response += "\n0. Home\n99. Back";
-                    }
-                    break;
-                case "APPLY_LOAN_AMOUNT":
-                    var product = (LoanProduct)session["selectedProduct"];
-                    if (userInput == "0") {
-                        session["screen"] = "HOME";
-                        response = homeMenu;
-                        Sessions.Remove(sessionId);
-                        break;
-                    }
-                    if (userInput == "99") {
-                        session["screen"] = "CHOOSE_PRODUCT";
-                        response = "CON Choose a loan product:\n" + string.Join("\n", ((List<LoanProduct>)session["eligibleOffers"]).Select((p, i) => $"{i + 1}. {p.Name} (Amount: {p.MinAmount}-{p.MaxAmount})"));
-                        response += "\n0. Home\n99. Back";
-                        break;
-                    }
-                    if (decimal.TryParse(userInput, out decimal amount) && amount >= product.MinAmount && amount <= product.MaxAmount)
-                    {
-                        session["loanAmount"] = amount;
-                        session["screen"] = "APPLY_LOAN_CONFIRM";
-                        response = $"CON Confirm:\nProduct: {product.Name}\nAmount: {amount}\n1. Confirm\n0. Cancel";
-                        response += "\n0. Home\n99. Back";
-                    }
-                    else
-                    {
-                        response = $"CON Invalid amount. Enter a number between {product.MinAmount} and {product.MaxAmount}:";
-                        response += "\n0. Home\n99. Back";
-                    }
-                    break;
-                case "APPLY_LOAN_CONFIRM":
-                    if (userInput == "0") {
-                        session["screen"] = "HOME";
-                        response = homeMenu;
-                        Sessions.Remove(sessionId);
-                        break;
-                    }
-                    if (userInput == "99") {
-                        session["screen"] = "APPLY_LOAN_AMOUNT";
-                        var selectedProduct = (LoanProduct)session["selectedProduct"];
-                        response = $"CON Enter amount (range: {selectedProduct.MinAmount}-{selectedProduct.MaxAmount})";
-                        response += "\n0. Home\n99. Back";
-                        break;
-                    }
-                    if (userInput == "1")
-                    {
-                        var prod = (LoanProduct)session["selectedProduct"];
-                        var bank = (Bank)session["selectedBank"];
-                        var loanAmount = (decimal)session["loanAmount"];
-                        // Actually add the loan to the user's account
-                        MockLoanDB.AddLoan(phoneNumber, bank.Name, prod.Name, loanAmount, prod.MinAmount * 0.08m); // Example interest logic
-                        response = $"END Application submitted!\nBank: {bank.Name}\nProduct: {prod.Name}\nAmount: {loanAmount}\nStatus: Active. Amount credited to your balance.";
-                        Sessions.Remove(sessionId);
-                    }
-                    else
-                    {
-                        response = "CON Invalid choice.\n1. Confirm\n0. Cancel";
-                        response += "\n0. Home\n99. Back";
                     }
                     break;
                 default:
